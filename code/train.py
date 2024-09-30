@@ -21,14 +21,16 @@ torch.cuda.manual_seed_all(0)
 random.seed(0)
 
 # Define the objective function for Optuna
+
+
 def objective(trial, args):
     # Suggest hyperparameters to tune
     batch_size = trial.suggest_categorical('batch_size', [8, 16])
     learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-4, log=True)
     max_epoch = trial.suggest_int('max_epoch', 1, 30)
-    
+
     dataloader = Dataloader(
-        args.model_name, 
+        args.model_name,
         batch_size,
         args.shuffle,
         args.train_path,
@@ -37,19 +39,20 @@ def objective(trial, args):
         args.predict_path,
         args.num_workers
     )
-    
+
     model = Model(args.model_name, lr=learning_rate)
-    
+
     trainer = pl.Trainer(
-        accelerator="gpu", devices=1, 
+        accelerator="gpu", devices=1,
         max_epochs=max_epoch,
         log_every_n_steps=1,
         logger=False,
         enable_checkpointing=False
     )
-    
+
     trainer.fit(model=model, datamodule=dataloader)
-    val_metrics = trainer.validate(model=model, datamodule=dataloader, verbose=False)
+    val_metrics = trainer.validate(
+        model=model, datamodule=dataloader, verbose=False)
     val_loss = val_metrics[0]['val_loss']
     return val_loss
 
@@ -90,7 +93,8 @@ class Dataloader(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, max_length=160)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_name, max_length=160)
         self.target_columns = ['label']
         self.delete_columns = ['id']
         self.text_columns = ['sentence_1', 'sentence_2']
@@ -99,8 +103,10 @@ class Dataloader(pl.LightningDataModule):
         data = []
         for idx, item in tqdm(dataframe.iterrows(), desc='tokenizing', total=len(dataframe)):
             # 두 입력 문장을 [SEP] 토큰으로 이어붙여서 전처리합니다.
-            text = '[SEP]'.join([item[text_column] for text_column in self.text_columns])
-            outputs = self.tokenizer(text, add_special_tokens=True, padding='max_length', truncation=True)
+            text = '[SEP]'.join([item[text_column]
+                                for text_column in self.text_columns])
+            outputs = self.tokenizer(
+                text, add_special_tokens=True, padding='max_length', truncation=True)
             data.append(outputs['input_ids'])
         return data
 
@@ -189,7 +195,8 @@ class Model(pl.LightningModule):
         loss = self.loss_func(logits, y.float())
         self.log("val_loss", loss)
 
-        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(logits.squeeze(), y.squeeze()))
+        self.log("val_pearson", torchmetrics.functional.pearson_corrcoef(
+            logits.squeeze(), y.squeeze()))
 
         return loss
 
@@ -197,7 +204,8 @@ class Model(pl.LightningModule):
         x, y = batch
         logits = self(x)
 
-        self.log("test_pearson", torchmetrics.functional.pearson_corrcoef(logits.squeeze(), y.squeeze()))
+        self.log("test_pearson", torchmetrics.functional.pearson_corrcoef(
+            logits.squeeze(), y.squeeze()))
 
     def predict_step(self, batch, batch_idx):
         x = batch
@@ -237,14 +245,14 @@ if __name__ == '__main__':
     max_epoch = best_params['max_epoch'] or args.max_epoch
     learning_rate = best_params['learning_rate'] or args.learning_rate
 
-
     # dataloader와 model을 생성합니다.
     dataloader = Dataloader(args.model_name, batch_size, args.shuffle, args.train_path, args.dev_path,
                             args.test_path, args.predict_path, args.num_workers)
     model = Model(args.model_name, learning_rate)
 
     # gpu가 없으면 accelerator="cpu"로 변경해주세요, gpu가 여러개면 'devices=4'처럼 사용하실 gpu의 개수를 입력해주세요
-    trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=max_epoch, log_every_n_steps=1)
+    trainer = pl.Trainer(accelerator="gpu", devices=1,
+                         max_epochs=max_epoch, log_every_n_steps=1)
 
     # Train part
     trainer.fit(model=model, datamodule=dataloader)
